@@ -1,46 +1,54 @@
+{-# LANGUAGE LambdaCase #-}
+
 module L.L2.Backend.CCodegen (cL2Codegen) where
 
 import L.L2.Frontend.Syntax
-import Utils.Pretty
+import Utils.Pretty (pretty)
+import Utils.Value  (Value(..))
 
 cL2Codegen :: L2 -> String
-cL2Codegen p =
+cL2Codegen e =
   unlines $
     [ "#include <stdio.h>"
-    , "int main() {"
-    ] ++ map (nest 2) (goProg p)
-      ++ [ nest 2 "putchar('\\n');"
-         , nest 2 "return 0;"
-         , "}"
-         ]
-  where nest n = (replicate n ' ' ++)
-
-goProg :: L2 -> [String]
-goProg (L2 ss) = concatMap goStmt ss
-
-goStmt :: S2 -> [String]
-goStmt = \case
-  LAssign (Var v) e ->
-    [ "int " ++ pretty v ++ " = " ++ goExp e ++ ";" ]
-  LPrint e ->
-    [ "printf(\"%d\", " ++ goExp e ++ ");" ]
-  LRead s (Var v) ->
-    [ "printf(\"" ++ s ++ "\");"
-    , "scanf(\"%d\", &" ++ pretty v ++ ");" ]
-  Def (Var v) e body ->
-    [ "{ /* def " ++ pretty v ++ " */"
-    , "  const int " ++ pretty v ++ " = " ++ goExp e ++ ";"
+    , "int main () {"
     ]
-    ++ (map (nest 2) (concatMap goStmt body))
+    ++ map (indent 2) (generateBody e)
+    ++ [ indent 2 "return 0;"
+       , "}"
+       ]
+  where
+    indent n = (replicate (n*2) ' ' ++)
+
+generateBody :: L2 -> [String]
+generateBody (L2 ss) = concatMap genStmt ss
+
+genStmt :: S2 -> [String]
+genStmt = \case
+  Def v e body ->
+       ["{ int " ++ pretty v ++ " = " ++ goExp e ++ ";"]
+    ++ map (indent 2) (concatMap genStmt body)
     ++ ["}"]
-    where nest n = (replicate n ' ' ++)
+  LRead s v ->
+       [ "printf(\"" ++ s ++ "\\n\");"
+       , "scanf(\"%d\", &" ++ pretty v ++ ");"
+       ]
+  LPrint e ->
+       case e of
+         LVal (VStr s) -> ["printf(\"" ++ s ++ "\\n\");"]
+         _             -> ["printf(\"%d\\n\", " ++ goExp e ++ ");"]
+  LAssign v e ->
+       ["int " ++ pretty v ++ " = " ++ goExp e ++ ";"]
+  where
+    indent n = (replicate (n*2) ' ' ++)
+
 goExp :: E2 -> String
 goExp = \case
   LVal (VInt n) -> show n
-  LVal (VStr s) -> "\"" ++ s ++ "\""
-  LVar (Var v)  -> pretty v
-  LAdd a b      -> bin "+" a b
+  LVal (VStr s) -> '"' : s ++ "\""
+  LVar v        -> pretty v
+  LAdd  a b     -> bin "+" a b
   LMinus a b    -> bin "-" a b
-  LMul a b      -> bin "*" a b
-  LDiv a b      -> bin "/" a b
-  where bin op a b = "(" ++ goExp a ++ op ++ goExp b ++ ")"
+  LMul  a b     -> bin "*" a b
+  LDiv  a b     -> bin "/" a b
+ where
+  bin op a b = "(" ++ goExp a ++ " " ++ op ++ " " ++ goExp b ++ ")"

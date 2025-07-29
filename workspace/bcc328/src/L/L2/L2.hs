@@ -6,13 +6,16 @@ import L.L2.Frontend.TypeCheck (typeCheck)
 import L.L2.Interpreter.Interp (runL2)
 import L.L2.Backend.V1Codegen (v1Codegen)
 import L.L2.Backend.CCodegen  (cL2Codegen)
+import System.FilePath (replaceExtension)
 import Utils.Pretty
 
 import System.Environment (getArgs)
 import System.Process      (callCommand)
 import Text.Printf         (printf)
 
-
+import qualified V.V1.V1Parser as V1P   
+import qualified V.V1.Interp   as V1I   
+import qualified V.V1.V1Lexer as V1L
 
 lexerOnly :: FilePath -> IO ()
 lexerOnly file = do
@@ -43,14 +46,11 @@ v1Compiler file = do
   case parseL2 src >>= typeCheck of
     Left err  -> putStrLn err
     Right ast -> do
-      let instrs = v1Codegen ast
+      let instrs = v1Codegen ast           
+          v1Src  = unlines instrs         
           out    = replaceExtension file ".v1"
-      writeFile out (unlines (map pretty instrs))
-      putStrLn $ "Código V1 salvo em " ++ out
-      -- opcional: rodar na VM para testar
-      case V1P.parse (unlines (map pretty instrs)) of
-        Left perr -> putStrLn perr
-        Right prog -> V1I.run prog
+      writeFile out v1Src
+      putStrLn $ "V1 code written to " ++ out
 
 -- 4. Compilador C  ---------------------------------------------------------
 cCompiler :: FilePath -> IO ()
